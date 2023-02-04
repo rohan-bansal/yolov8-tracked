@@ -16,17 +16,9 @@ while True:
 
     if (ret0):
         cv2.imshow('Cam 0', frame0)
-
-    if (ret1):
         cv2.imshow('Cam 1', frame1)
-
-    if (ret2):
         cv2.imshow('Cam 2', frame2)
-    
-    if (ret3):
-        cv2.imshow('Cam 3', frame3)    
-    
-    if (ret4):
+        cv2.imshow('Cam 3', frame3)
         cv2.imshow('Cam 4', frame4)   
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
