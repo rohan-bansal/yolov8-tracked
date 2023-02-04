@@ -1,33 +1,42 @@
-import cv2
+from threading import Thread
+import cv2, time
+ 
+class VideoStreamWidget(object):
+    def __init__(self, src=0):
+        self.capture = cv2.VideoCapture(src)
+        # Start the thread to read frames from the video stream
+        self.thread = Thread(target=self.update, args=())
+        self.thread.daemon = True
+        self.thread.start()
 
-cv_0 = cv2.VideoCapture(2)
-cv_1 = cv2.VideoCapture(9)
-cv_2 = cv2.VideoCapture(5)
-cv_3 = cv2.VideoCapture(7)
-cv_4 = cv2.VideoCapture(11)
-
-while True:
+    def update(self):
+        # Read the next frame from the stream in a different thread
+        if self.capture.isOpened():
+            while True:
+                (self.status, self.frame) = self.capture.read()
+                time.sleep(.01)
     
-    ret0, frame0 = cv_0.read()
-    ret1, frame1 = cv_1.read()
-    ret2, frame2 = cv_2.read()
-    ret3, frame3 = cv_3.read()
-    ret4, frame4 = cv_4.read()
+    def show_frame(self):
+        # Display frames in main program
+        cv2.imshow('frame', self.frame)
+        key = cv2.waitKey(1)
+        if key == ord('q'):
+            self.capture.release()
+            cv2.destroyAllWindows()
+            exit(1)
 
-    if (ret0):
-        cv2.imshow('Cam 0', frame0)
-        cv2.imshow('Cam 1', frame1)
-        cv2.imshow('Cam 2', frame2)
-        cv2.imshow('Cam 3', frame3)
-        cv2.imshow('Cam 4', frame4)   
-
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
-# When everything is done, release the capture
-cv_0.release()
-cv_1.release()
-cv_2.release()
-cv_3.release()
-cv_4.release()
-cv2.destroyAllWindows()
+if __name__ == '__main__':
+    video_stream_widget1 = VideoStreamWidget(src=9)
+    video_stream_widget2 = VideoStreamWidget(src=2)
+    video_stream_widget3 = VideoStreamWidget(src=5)
+    video_stream_widget4 = VideoStreamWidget(src=7)
+    video_stream_widget5 = VideoStreamWidget(src=11)
+    while True:
+        try:
+            video_stream_widget1.show_frame()
+            video_stream_widget2.show_frame()
+            video_stream_widget3.show_frame()
+            video_stream_widget4.show_frame()
+            video_stream_widget5.show_frame()
+        except AttributeError:
+            pass
