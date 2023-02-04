@@ -11,10 +11,10 @@ class VideoStreamWidget(object):
 
     def update(self):
         # Read the next frame from the stream in a different thread
-        if self.capture.isOpened():
             while True:
-                (self.status, self.frame) = self.capture.read()
-                time.sleep(.01)
+                if self.capture.isOpened():
+                    (self.status, self.frame) = self.capture.read()
+                    time.sleep(.01)
     
     def show_frame(self):
         # Display frames in main program
