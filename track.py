@@ -14,7 +14,7 @@ import numpy as np
 from pathlib import Path
 import torch
 import torch.backends.cudnn as cudnn
-from math import atan2, cos, sin, sqrt, pi
+from math import atan2, cos, sin, sqrt, tan, pi
 import calculation
 
 FILE = Path(__file__).resolve()
@@ -42,6 +42,80 @@ from yolov8.ultralytics.yolo.utils.ops import Profile, non_max_suppression, scal
 from yolov8.ultralytics.yolo.utils.plotting import Annotator, colors
 
 from trackers.multi_tracker_zoo import create_tracker
+
+focal_length_y = 500
+focal_length_x = 520
+known_cone_height = 33.0
+known_cone_width = 21.0
+known_cube_height_width = 24
+
+cam_angle = 22
+cam_height = 15
+
+def angleToObject(im0, bbox_xyxy):
+
+    resolution = (im0.shape[1], im0.shape[0])
+    center_pixel = ((bbox_xyxy[0] + bbox_xyxy[2]) / 2, (bbox_xyxy[1] + bbox_xyxy[3]) / 2)
+    cv2.circle(im0, (int(center_pixel[0]), int(center_pixel[1])), 5, (0, 0, 255), -1)
+
+    # angle to center pixel in X and Y directions
+    angle_x = (center_pixel[0] / resolution[0]) * 120
+    angle_y = (center_pixel[1] / resolution[1]) * 60
+
+    # get angle from centerline
+    angle_x = angle_x - 60
+    angle_y = angle_y - 30
+
+    return angle_x, angle_y
+
+def distance_to_camera(obj_dict, type, im0):
+
+    bounding_box = obj_dict['bounding_box']
+
+    bounding_width = bounding_box[2] - bounding_box[0]
+    bounding_height = bounding_box[3] - bounding_box[1]
+    resolution = (im0.shape[1], im0.shape[0])
+
+    selected_height = 0
+    selected_width = 0
+
+    if type == "cone":
+        selected_height = known_cone_height
+        selected_width = known_cone_width
+        if obj_dict['tipped'] == True:
+            selected_height = known_cone_width
+            selected_width = known_cone_height
+    elif type == "cube":
+        selected_height = known_cube_height_width
+        selected_width = known_cube_height_width
+
+    clipped_x = False
+    clipped_y = False
+
+     # if object clipped into left edge, use height for distance. use inches for real obj. dimension
+    if bounding_box[0] - 2 <= 0:
+        dist_to_cam = (selected_height * focal_length_y) / bounding_height
+        clipped_x = True
+    # if object is clipped into right edge, use height for distance
+    elif bounding_box[2] + 2 >= resolution[0]:
+        dist_to_cam = (selected_height * focal_length_y) / bounding_height
+        clipped_x = True
+    # if object is clipped into top edge, use width for distance
+    if bounding_box[1] - 2 <= 0:
+        dist_to_cam = (selected_width * focal_length_x) / bounding_width
+        clipped_y = True
+    # if object is clipped into bottom edge, use width for distance
+    elif bounding_box[3] + 2 >= resolution[1]:
+        dist_to_cam = (selected_width * focal_length_x) / bounding_width
+        clipped_y = True
+
+    if not clipped_x and not clipped_y:
+        dist_to_cam = (selected_height * focal_length_y) / bounding_height
+    
+    angle = angleToObject(im0, bounding_box)
+
+    return (dist_to_cam, angle)
+
 
 def convex_hull_pointing_up(ch):
     
@@ -346,6 +420,7 @@ def run(
                            
                             cone_data["bounding_box"] = (float(c1[0]), float(c1[1]), float(c2[0]), float(c2[1]))
                             cone_data["id"] = int(id)
+                            cone_data["tipped"] = False
                             cone_data["confidence"] = float(conf)
 
                             if(crop_img.size == 0):
@@ -353,9 +428,10 @@ def run(
                             hsv = cv2.cvtColor(crop_img, cv2.COLOR_BGR2HSV)
                             thresh = cv2.inRange(hsv, (10, 100, 100), (30, 255, 255))
 
+
                             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5,5))
                             morph = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
-                            # cv2.imshow("threshed", thresh)
+                            cv2.imshow("threshed", thresh)
 
                             contours, _ = cv2.findContours(morph, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
                             approx_contours = []
@@ -388,7 +464,17 @@ def run(
 
                             data["cones"].append(cone_data)
 
-                            print(calculation.doMath(cone_data, "cone", im0))
+                            dist = distance_to_camera(cone_data, "cone", im0)
+                            # print(dist)
+                            cv2.putText(im0, f"distance: {dist[0]}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                            cv2.putText(im0, f"anglex: {dist[1][0]}", (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                            cv2.putText(im0, f"angley: {dist[1][1]}", (10, 140), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+
+                            # calculate ground distance
+
+
+
+                            # print(calculation.doMath(cone_data, "cone", im0))
                         else:
                             cube_data = {}
 
@@ -397,6 +483,14 @@ def run(
                             cube_data["confidence"] = float(conf)
 
                             data["cubes"].append(cube_data)
+
+                            dist = distance_to_camera(cube_data, "cube", im0)
+                            print(dist)
+                            cv2.putText(im0, f"distance: {dist[0]}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                            cv2.putText(im0, f"anglex: {dist[1][0]}", (10, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                            cv2.putText(im0, f"angley: {dist[1][1]}", (10, 140), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+
+                        print(data)
 
                         if save_txt:
                             # to MOT format
